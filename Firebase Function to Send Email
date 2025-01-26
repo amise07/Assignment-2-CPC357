@@ -1,0 +1,35 @@
+const functions = require("firebase-functions");
+const nodemailer = require("nodemailer");
+
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: 'your-email@gmail.com',
+    pass: 'your-email-password'
+  }
+});
+
+exports.sendEmailAlert = functions.database.ref('/soil_data')
+  .onUpdate((change, context) => {
+    const afterData = change.after.val();
+    const soilMoisture = afterData.SoilMoisture;
+
+    if (soilMoisture < 30) {
+      const mailOptions = {
+        from: 'your-email@gmail.com',
+        to: 'recipient-email@gmail.com',
+        subject: 'Alert: Low Soil Moisture',
+        text: `Soil moisture level is below 30%. Current value: ${soilMoisture}%`
+      };
+
+      transporter.sendMail(mailOptions, (error, info) => {
+        if (error) {
+          console.log("Error sending email: ", error);
+        } else {
+          console.log("Email sent: " + info.response);
+        }
+      });
+    }
+
+    return null;
+  });
