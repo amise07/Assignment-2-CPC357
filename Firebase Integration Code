@@ -1,0 +1,23 @@
+// Firebase listener to update charts when new data comes in
+dbRef.on('value', (snapshot) => {
+  const data = snapshot.val();
+  const timestamp = new Date().toLocaleTimeString();
+
+  // Update soil moisture chart
+  if (data && data.soilMoisture !== undefined) {
+    soilMoistureChart.data.labels.push(timestamp);
+    soilMoistureChart.data.datasets[0].data.push(data.soilMoisture);
+    if (soilMoistureChart.data.labels.length > 10) {
+      soilMoistureChart.data.labels.shift();
+      soilMoistureChart.data.datasets[0].data.shift();
+    }
+    soilMoistureChart.update();
+  }
+
+  // Update rain detection chart
+  if (data && data.rainDetection !== undefined) {
+    // Update rain detection data (1 = rain detected, 0 = no rain)
+    rainDetectionChart.data.datasets[0].data = [data.rainDetection, 1 - data.rainDetection];
+    rainDetectionChart.update();
+  }
+});
