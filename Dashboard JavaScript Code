@@ -1,0 +1,120 @@
+// Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyBBz1e9Y8KbPNfXCeyokKG993SKyZs6z2w",
+  authDomain: "soil-moisture-detection-system.firebaseapp.com",
+  projectId: "soil-moisture-detection-system",
+  storageBucket: "soil-moisture-detection-system.appspot.com",
+  messagingSenderId: "96417782933",
+  appId: "1:96417782933:web:bcfd656374173f746b0f9c",
+  measurementId: "G-QQ9LEJGJZ6"
+};
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+
+// Reference to Firebase Realtime Database
+const dbRef = firebase.database().ref();
+
+// Get the chart elements
+const soilMoistureCtx = document.getElementById('soilMoistureChart').getContext('2d');
+const rainDetectionCtx = document.getElementById('rainDetectionChart').getContext('2d');
+
+// Initialize charts
+let soilMoistureChart = new Chart(soilMoistureCtx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [{
+      label: 'Soil Moisture (%)',
+      data: [],
+      borderColor: '#4CAF50',
+      backgroundColor: 'rgba(76, 175, 80, 0.3)',
+      fill: true,
+      lineTension: 0.4,
+    }]
+  },
+  options: {
+    responsive: true,
+    scales: {
+      y: {
+        beginAtZero: true,
+        max: 100,
+        ticks: {
+          stepSize: 20
+        }
+      }
+    }
+  }
+});
+
+let rainDetectionChart = new Chart(rainDetectionCtx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [{
+      label: 'Rain Detection (0 = No, 1 = Yes)',
+      data: [],
+      borderColor: '#FF5722',
+      backgroundColor: 'rgba(255, 87, 34, 0.3)',
+      fill: true,
+      lineTension: 0.4,
+    }]
+  },
+  options: {
+    responsive: true,
+    scales: {
+      y: {
+        beginAtZero: true,
+        max: 1,
+        ticks: {
+          stepSize: 0.2
+        }
+      }
+    }
+  }
+});
+
+// Listen for data updates from Firebase
+dbRef.on('value', (snapshot) => {
+  const data = snapshot.val();
+  const timestamp = new Date().toLocaleTimeString();
+
+  // Update soil moisture chart
+  if (data && data.soilMoisture !== undefined) {
+    soilMoistureChart.data.labels.push(timestamp);
+    soilMoistureChart.data.datasets[0].data.push(data.soilMoisture);
+    if (soilMoistureChart.data.labels.length > 10) {
+      soilMoistureChart.data.labels.shift();
+      soilMoistureChart.data.datasets[0].data.shift();
+    }
+    soilMoistureChart.update();
+  }
+
+  // Update rain detection chart
+  if (data && data.rainDetection !== undefined) {
+    rainDetectionChart.data.labels.push(timestamp);
+    rainDetectionChart.data.datasets[0].data.push(data.rainDetection);
+    if (rainDetectionChart.data.labels.length > 10) {
+      rainDetectionChart.data.labels.shift();
+      rainDetectionChart.data.datasets[0].data.shift();
+    }
+    rainDetectionChart.update();
+  }
+
+  // Display email alert if necessary
+  if (data && data.soilMoisture < 30) {  // Example: soil moisture under 30% triggers alert
+    document.getElementById('alert').innerText = 'Alert: Soil moisture is too low!';
+    sendEmailAlert();
+  } else {
+    document.getElementById('alert').innerText = '';
+  }
+});
+
+// Send email alert function (you will need a backend service for sending emails)
+function sendEmailAlert() {
+  const emailContent = "Soil moisture is critically low! Please check your system.";
+  
+  // Email sending via Gmail or other service (This should be implemented in a backend server)
+  // Example: Make an HTTP request to send the email (implementation needed)
+  console.log("Sending email alert:", emailContent);
+}
