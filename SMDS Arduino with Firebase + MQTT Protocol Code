@@ -1,0 +1,125 @@
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <FirebaseESP32.h>
+
+// WiFi credentials
+#define WIFI_SSID "HUAWEI-B310-730F"
+#define WIFI_PASSWORD "047BHMTHG2B"
+
+// Google Cloud IoT Core configurations
+const char* mqtt_server = "mqtt.googleapis.com";
+const int mqtt_port = 8883;
+const char* project_id = "soil-moisture-detection-system"; // Your GCP project ID
+const char* location = "us-central1"; // Your GCP region
+const char* registry_id = "soil-moisture-registry"; // Your IoT Core registry ID
+const char* device_id = "soil-moisture-device"; // Your IoT Core device ID
+
+// MQTT topic for telemetry data
+const char* telemetry_topic = "/devices/soil-moisture-device/events";
+
+// Firebase configuration
+#define FIREBASE_HOST "soil-moisture-detection-system.firebaseio.com"
+#define FIREBASE_AUTH "your-database-secret"
+
+// Firebase real-time database path
+String path = "/soil_data";
+
+// SSL client and PubSubClient instance for secure communication
+WiFiClientSecure netClient;
+PubSubClient mqttClient(netClient);
+
+// Constants for soil moisture sensor data range
+int MinMoistureValue = 4095;
+int MaxMoistureValue = 1800;
+int MinMoisture = 0;
+int MaxMoisture = 100;
+
+// Sensor pins
+const int rainPin = 34;
+const int moisturePin = 35;
+
+unsigned long lastMsgTime = 0;
+#define INTERVAL 60000 // Publish data every 60 seconds
+
+// Firebase setup
+FirebaseData firebaseData;
+
+// Setup WiFi connection
+void setup_wifi() {
+  Serial.print("Connecting to WiFi: ");
+  Serial.println(WIFI_SSID);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("\nWiFi connected.");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+// Setup MQTT connection
+void connect_to_mqtt() {
+  Serial.print("Connecting to MQTT server...");
+  while (!mqttClient.connected()) {
+    if (mqttClient.connect(device_id)) {
+      Serial.println("connected.");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(mqttClient.state());
+      Serial.println(" retrying in 5 seconds...");
+      delay(5000);
+    }
+  }
+}
+
+// Send data to Firebase
+void sendToFirebase(int soilMoisture, bool raining) {
+  String jsonPayload = "{\"SoilMoisture\":" + String(soilMoisture) + ",\"Raining\":" + String(raining) + "}";
+
+  if (Firebase.pushJSON(firebaseData, path, jsonPayload)) {
+    Serial.println("Data uploaded to Firebase successfully!");
+  } else {
+    Serial.println("Error uploading data to Firebase: " + firebaseData.errorReason());
+  }
+}
+
+// Setup function
+void setup() {
+  Serial.begin(115200);
+  setup_wifi();
+  netClient.setCACert("-----BEGIN CERTIFICATE-----\nYOUR ROOT CA CERT HERE\n-----END CERTIFICATE-----");
+  mqttClient.setServer(mqtt_server, mqtt_port);
+  Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
+}
+
+void loop() {
+  if (!mqttClient.connected()) {
+    connect_to_mqtt();
+  }
+  mqttClient.loop();
+
+  unsigned long cur = millis();
+  if (cur - lastMsgTime > INTERVAL) {
+    lastMsgTime = cur;
+
+    // Read and process rain sensor data
+    int raining = !digitalRead(rainPin); // Assumes low = rain detected
+
+    // Read and process soil moisture sensor data
+    int sensorValue = analogRead(moisturePin);
+    int moisture = map(sensorValue, MinMoistureValue, MaxMoistureValue, MinMoisture, MaxMoisture);
+
+    // Publish data to Google Cloud IoT Core
+    String telemetryPayload = String("{\"Raining\":") + raining + ",\"SoilMoisture\":" + moisture + "}";
+    mqttClient.publish(telemetry_topic, telemetryPayload.c_str());
+
+    Serial.print("Published telemetry: ");
+    Serial.println(telemetryPayload);
+
+    // Upload data to Firebase
+    sendToFirebase(moisture, raining);
+  }
+}
