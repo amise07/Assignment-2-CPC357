@@ -1,0 +1,21 @@
+#include <WiFi.h>
+#include <SMTPClient.h>
+
+SMTPClient smtp;
+
+// Email credentials
+const char* smtpServer = "smtp.gmail.com";
+const int smtpPort = 587;
+const char* emailUser = "your-email@gmail.com";
+const char* emailPassword = "your-email-password";
+
+void sendAlert(int soilMoisture, bool rainDetected) {
+  smtp.connect(smtpServer, smtpPort);
+  smtp.auth(emailUser, emailPassword);
+  smtp.from(emailUser);
+  smtp.to("recipient-email@gmail.com");
+  smtp.subject("Soil Moisture Alert");
+  smtp.message("Soil Moisture: " + String(soilMoisture) + "%\nRain Detected: " + (rainDetected ? "Yes" : "No"));
+  smtp.send();
+  smtp.quit();
+}
