@@ -1,0 +1,21 @@
+#include <FirebaseESP32.h>
+
+// Firebase credentials
+#define FIREBASE_HOST "soil-moisture-detection-system.firebaseio.com"
+#define FIREBASE_AUTH "your-database-secret"
+
+FirebaseData firebaseData;
+
+// Firebase real-time database path
+String path = "/soil_data";
+
+// Send data to Firebase
+void sendToFirebase(int soilMoisture, bool raining) {
+  String jsonPayload = "{\"SoilMoisture\":" + String(soilMoisture) + ",\"Raining\":" + String(raining) + "}";
+
+  if (Firebase.pushJSON(firebaseData, path, jsonPayload)) {
+    Serial.println("Data uploaded to Firebase successfully!");
+  } else {
+    Serial.println("Error uploading data to Firebase: " + firebaseData.errorReason());
+  }
+}
