@@ -1,0 +1,112 @@
+#include <WiFi.h>
+#include <PubSubClient.h>
+
+// WiFi credentials
+#define WIFI_SSID "HUAWEI-B310-730F"
+#define WIFI_PASSWORD "047BHMTHG2B"
+
+// Google Cloud IoT Core MQTT configurations
+const char* mqtt_server = "mqtt.googleapis.com";
+const int mqtt_port = 8883;
+const char* project_id = "soil-moisture-detection-system"; // Replace with your GCP Project ID
+const char* location = "us-central1"; // Replace with your GCP IoT Core Region
+const char* registry_id = "soil-moisture-registry"; // Replace with your IoT Core Registry ID
+const char* device_id = "soil-moisture-device"; // Replace with your IoT Core Device ID
+
+// Paths for MQTT topics
+const char* telemetry_topic = "/devices/soil-moisture-device/events"; // Telemetry data topic
+
+// SSL client and PubSubClient instance
+WiFiClientSecure netClient;
+PubSubClient mqttClient(netClient);
+
+// Constants for soil moisture sensor data range
+int MinMoistureValue = 4095;
+int MaxMoistureValue = 1800;
+int MinMoisture = 0;
+int MaxMoisture = 100;
+
+// Sensor pins
+const int rainPin = 34; // GPIO pin for rain sensor
+const int moisturePin = 35; // GPIO pin for soil moisture sensor
+
+unsigned long lastMsgTime = 0;
+#define INTERVAL 60000 // Publish data every 60 seconds
+
+// Google Cloud IoT Core private key (replace with your own private key)
+const char* private_key = "-----BEGIN PRIVATE KEY-----\nYOUR PRIVATE KEY HERE\n-----END PRIVATE KEY-----";
+
+// Google Cloud IoT Core root certificate (for secure communication)
+const char* google_root_ca = "-----BEGIN CERTIFICATE-----\nYOUR ROOT CA CERT HERE\n-----END CERTIFICATE-----";
+
+// Setup WiFi connection
+void setup_wifi() {
+  Serial.print("Connecting to WiFi: ");
+  Serial.println(WIFI_SSID);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("\nWiFi connected.");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+// Connect to MQTT server (Google Cloud IoT Core)
+void connect_to_mqtt() {
+  Serial.print("Connecting to MQTT server...");
+  while (!mqttClient.connected()) {
+    if (mqttClient.connect(device_id)) {
+      Serial.println("connected.");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(mqttClient.state());
+      Serial.println(" retrying in 5 seconds...");
+      delay(5000);
+    }
+  }
+}
+
+// Setup function
+void setup() {
+  Serial.begin(115200);
+  setup_wifi();
+  
+  // Set up secure communication for MQTT
+  netClient.setCACert(google_root_ca); // Set the Google root CA certificate
+  mqttClient.setServer(mqtt_server, mqtt_port); // Set MQTT server and port
+
+  // Optionally: Set up MQTT client to use Google Cloud's private key for authentication
+  mqttClient.setSSL(true); // Enable SSL/TLS encryption
+}
+
+void loop() {
+  if (!mqttClient.connected()) {
+    connect_to_mqtt();
+  }
+  mqttClient.loop(); // Keep the MQTT client alive
+
+  unsigned long cur = millis();
+  if (cur - lastMsgTime > INTERVAL) {
+    lastMsgTime = cur;
+
+    // Read rain sensor data (assuming rain detected when LOW)
+    int raining = !digitalRead(rainPin);
+
+    // Read soil moisture sensor data
+    int sensorValue = analogRead(moisturePin);
+    int moisture = map(sensorValue, MinMoistureValue, MaxMoistureValue, MinMoisture, MaxMoisture);
+
+    // Create telemetry payload (JSON format)
+    String telemetryPayload = String("{\"Raining\":") + raining + ",\"SoilMoisture\":" + moisture + "}";
+
+    // Publish the telemetry data to Google Cloud IoT Core
+    mqttClient.publish(telemetry_topic, telemetryPayload.c_str());
+
+    Serial.print("Published telemetry: ");
+    Serial.println(telemetryPayload);
+  }
+}
